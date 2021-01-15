@@ -1,0 +1,160 @@
+---
+title: "Predicting Underlying Cause of Death<br>(Gargabe Code Redistribution)"
+output: rmarkdown::html_vignette
+# output:
+#   prettydoc::html_pretty:
+#     theme: Cayman 
+#     highlight: github
+vignette: >
+  %\VignetteIndexEntry{GC redistribution}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## 1. Introduction
+
+This vignette demonstrate how to predict the underlying cause of death (UCs) from Garbage Codes (GCs), i.e. garbage code redistribution. GCs (e.g. heart failure and septicemia) are mis-coded causes of death in the registry data. These GCs provide little information for disease/injury prevention because they are mostly ill-defined, or immediate causes shared by many diseases, and are unlikely the target for most public health interventions. On ther other hand, UCs are more well-defined causes of death, such as stroke and Malaria, that can be directly used to evaluate the fatal burden of specific disease. In sum, predicting the UCs from GCs are important to make the most use of death registry data, and to assess the fatal disease burden accurately. The problem is a multinomial classification problem where we want to predict the UC category of a GC record if it were correctly coded. 
+
+
+## 2. Methods
+
+Naive Bayes classifier (NB) and multinomial logistic regression (MLR) are used to estimated the probability of each UC category given the features (covariates) of each GC record. NB  better handles missing values in the data, and is more robust to redundant predictors in the model. NB is also less prone to the instability caused by sparse data when the number of UC categories is large (which is typically the situation). This is done by adding a smoothing parameter to all conditional probabilities, resulting in shrinkage estimates of the probabilities. Nonetheless, when there is fewer UC categories, and missing values, MLR has better prediction accuracy (Ng, et al. 2020). In terms of computation efficiency, MLR is significantly slower in complex problems. In general, we suggest doing validation or even cross-validation to test which method is more suitable to the specific data in terms of accuracy and efficieny.
+
+
+
+## 3. Instructions
+
+Next, we'll walk through the steps to fit GC redistribution models using simulated dataset (mimicking Taiwan death registry plus multiple causes dataset) and both NB and MLR methods. All the materials are available in `TBDtoolbox` package.
+
+
+### 3.1 Simulated data
+
+Let's first look at the simulated death registry data which contains the cause of death, and other co-variates for 250,000 individuals. The variables are described as follows.
+
+  *   `id`: individual identity key
+  *   `age`: age of the individual
+  *   `sex`: sex of the individual
+  *   `x1`-`x2`: true predictor variables (binary, can be NA)
+  *   `x3`-`x4`: noise predictor variables (binary, can be NA)
+  *   `GUC`: main cause of death
+  *   `MC1`-`MC5`: supplemental cause of death
+
+`GUC` is the **main** cause of death, which can be a UC or GC. UC-records (`GUC` = one of the UCs) will be used in training and validation, while GC-records (`GUC` = one of the GCs) will only be used in prediction. `MC1`-`MC5` are **supplemental** causes of death that are often incomplete (i.e. one can have 0~5 supplemental causes). `x1`-`x2` are the true predictor variables that will affect the distribution of the underlying causes, while `x3`-`x4` are merely noise variables.
+
+
+```{r}
+library(TBDtoolbox)
+data(multideath)
+head(multideath)
+```
+
+
+### 3.2 Define the GC-UC mapping constraints
+
+To set up a redistribution algorithm, one must clearly define the categories and mappings of UCs and GCs so that we (as well as the algorithm) can 
+
+  i.    Separate the UC-records and GC-records for training and predicting, respectively.
+  ii.   Know the scope of UC prediction. We will give probability estimates only for those UC categories
+  iii.    Know the constraints of GC redistribution. Some GC categories just cannot be redistribute to some UC categories at all. e.g. Ill-defined cancer cannot be redistributed to CVDs, and those probabilities will be forced to 0.  
+
+They way to specify the categories and mappings at once is to construct a named matrix, where the row names list the GC categories and the column names list the UC categories. The entries of the matrix will be 1 for allowing redistribution from the row (GC) to the column (UC), and 0 otherwise. In this demonstration, we set all the entries to 1's to allow complete redistribution, but this mapping list should be carefully examined and specified to reflect the diseases biology in practice.
+
+The following code snippet identifies the UC and Gc categories exist in the simulated dataset, and constructing a complete mapping matrix with valid row and column names.
+```{r}
+gucs <- sort(unique(multideath$GUC))
+ucs <- gucs[1:97] # these are UCs
+gcs <- gucs[98:107] # these are GCs
+
+# create a full GC-UCmapping matrix
+gc_to_uc <- matrix(1, 10, 97, dimnames = list(gcs, ucs)) 
+```
+
+### 3.3 Specify the model formula
+
+Next, we have to specify the model formula which are similar with those in `lm()` as follows.
+
+> `Y ~ X`
+
+where `Y` is the outcome variable, and `X` is the predictor variable in the model. Using the variable names in the simulated dataset, the formula will be like
+
+> `GUC ~ x1 + x2`
+
+Supplemental cause of death must be specified by `multi(.)` as one agglomerate predictor variable, such as
+
+> `GUC ~ multi(MC1, MC2, MC3)`
+
+Note that variable inside `multi(.)` are separated be commas `,` not plus signs `+`. In this demonstration, we will use all available variables to predict the main underlying cause of death `GUC`. Hence, the formula will be 
+
+> `GUC ~ age + sex + x1 + x2 + x3 + x4 + multi(MC1, MC2, MC3, MC4, MC5)`
+
+
+The code snippet defining the formula:
+
+```{r}
+fml <- GUC ~ age + sex + x1 + x2 + x3 + x4 + multi(MC1, MC2, MC3, MC4, MC5)
+```
+
+
+### 3.4 Model fitting and interpretation
+
+Next, we fit the model to data using `GUCfit(.)` provided also in `TBDtoolbox` package. The arguments for this function are described below. Progresses and messages will be printed out amid the process. Be careful for the missing data. NA's in the outcome variable (`GUC` here) will .....
+
+NA's in the predictor variable will be resolved by creating (automatically) an additional category for each variable with missingness. 
+
+The function will return an `GUCfit` object containing the settings, the fitted model, and the UC predictions for the GC-records. See `?GUCfit` fro more details of the arguments and the content of the returned object.
+
+  *   `formula` (`formula`): the model formula as defined in *Sec. 3.3*.
+  *   `data` (`data.frame`): the data. 
+  *   `gc_to_uc` (`matrix`): the GC-UC mapping constraints as defined in *Sec. 3.2*.
+  *   `nm_id` (`character`): the variable name of the identity key.
+  *   `method` (`character`): the modeling method.
+  *   `prop_valid` (`numeric`): the proportion of data used for validation.
+  *   `alp` (`numeric`): the smoothing parameter for the NB method.
+
+```{r}
+fit <- GUCfit(
+  formula = fml,  # model formula
+  data = multideath[1:5000,],  # data
+  gc_to_uc = gc_to_uc,  # GC-UC mapping matrix
+  nm_id = "id",  # identity key
+  method = "NB",  # method
+  prop_valid = 0.2,  # proportion of data for validation
+  alp = 0.1  # smoothing parameter
+  )
+summary.default(fit)
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+summary(fit)
+```
+
+
+
+### 3.5 Making predictions or GC-records
+
+
+
+
+
+## Notes
+
+
+
+
+## References
+
+1. Ng, T. C., Lo, W. C., Ku, C. C., Lu, T. H., & Lin, H. H. (2020). Improving the use of mortality data in public health: A comparison of garbage code redistribution models. American journal of public health, 110(2), 222-229.
