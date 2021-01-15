@@ -39,7 +39,7 @@ HIfit <- function(
   if(!model %in% c("binomial", "normal")) stop("Invalid model argument. Must be one of 'binomial', 'normal'. ")
   if(missing(Nsam)) stop("Missing required argument: Nsam")
   if(model == "binomial"){
-    Y <- as.integer(Y)
+    Y <- as.integer(round(Y*Nsam))
     Nsam <- as.integer(Nsam)
     Ysd <- NULL
     exp_name <- c("pos_pd")
@@ -80,10 +80,14 @@ HIfit <- function(
     Mod <- rstan::stan_model(model_code = TBDstan_models$HIfit_binomial)
   } else if (model == "normal"){
     Mod <- rstan::stan_model(model_code = TBDstan_models$HIfit_normal)
+    #Mod <- rstan::stan_model("prep/stan/HIfit_normal.stan")
   }
 
   cat("Sampling ... \n")
-  res <- rstan::sampling(object = Mod, data = D, ...)
+  res <- rstan::sampling(object = Mod, data = D,
+                         chains = 4, core= 4,
+                         iter = 1500, warmup = 1000,
+                         control=list(adapt_delta = .8, max_treedepth = 8))
 
   cat("Exporting ... \n ")
   Y_est <- lapply(exp_name, function(xv){
@@ -102,7 +106,7 @@ HIfit <- function(
       dat = D,
       model = model,
       Y_obs = Y,
-      Y_est = Y_est,
+      Y_est = Y_est
 
     ), class = "HIfit")
 }

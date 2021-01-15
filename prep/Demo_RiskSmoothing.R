@@ -55,18 +55,19 @@ df <- risk_drink %>%
   mutate(
     Xc = as.integer(factor(city)),
     Xr = as.integer(factor(region)),
-    isDat = as.integer(nsam > 0)
+    isDat = as.integer(csam > 0) ###
   )
 
 X_fix <- model.matrix(~ age + sex , data = df)
 X_hier <- as.matrix(select(df, Xc, Xr))
 
-fit2 <- HIfit(X_fix = X_fix, X_hier = X_hier,
-             Y = df$mean_x, isDat = df$isDat,
-             fam = "normal", pop = df$nsam, sdv = df$sd_x,
+fit2 <- HIfit(X_fix = X_fix , X_hier = X_hier,
+              Y = df$mean_x, Ysd = df$sd_x,
+              Nsam = df$csam, isDat = df$isDat,
+              model = "normal",
              chains = 4, core= 4,
              iter = 2500, warmup = 1500,
-             control=list(adapt_delta = .8, max_treedepth = 10))
+             control=list(adapt_delta = .7, max_treedepth = 8))
 
 df <- bind_cols(df, fit2$est[[1]])
 
