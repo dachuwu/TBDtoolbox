@@ -10,7 +10,7 @@ df <- risk_drink %>%
   mutate(
     Xc = as.integer(factor(city)),
     Xr = as.integer(factor(region)),
-    isDat = as.integer(nsam > 0)
+    isDat = as.integer(nsam > 0) ###
   )
 
 X_fix <- model.matrix(~ age + sex , data = df)
@@ -18,20 +18,18 @@ X_hier <- as.matrix(select(df, Xc, Xr))
 
 #
 fit <- HIfit(X_fix = X_fix , X_hier = X_hier,
-             Y = df$csam, Nsam = df$nsam, isDat = df$isDat,
+             Y = df$prev, Nsam = df$nsam, isDat = df$isDat,
              model = "binomial",
-             chains = 4, core= 4,
-             iter = 2000, warmup = 1000,
-             control=list(adapt_delta = .8, max_treedepth = 10))
+             chains = 2, core= 2,
+             iter = 1500, warmup = 1000,
+             control=list(adapt_delta = .7, max_treedepth = 8))
 
 plot(fit)
 
 check_hmc_diagnostics(fit$fit)
 
 
-df <- bind_cols(df, fit$est[[1]])
-
-df%>%
+bind_cols(df, fit$Y_est[[1]])%>%
   mutate(
     age = factor(age),
     prev = ifelse(isDat == 1, prev, NA))%>%
@@ -69,9 +67,7 @@ fit2 <- HIfit(X_fix = X_fix , X_hier = X_hier,
              iter = 2500, warmup = 1500,
              control=list(adapt_delta = .7, max_treedepth = 8))
 
-df <- bind_cols(df, fit2$est[[1]])
-
-df%>%
+bind_cols(df, fit2$Y_est[[1]])%>%
   mutate(
     age = factor(age),
     mean_x = ifelse(isDat == 1, mean_x, NA))%>%
@@ -110,8 +106,8 @@ X_hier <- as.matrix(select(df, Xc, Xr))
 
 
 fit3 <- HIfit(X_fix = X_fix, X_hier = X_hier,
-              Y = df$mean_x, isDat = df$isDat,
-              fam = "normal", pop = df$nsam, sdv = df$sd_x,
+              Y = df$mean_x, Nsam = df$nsam, Ysd = df$sd_x, isDat = df$isDat,
+              model = "normal",
               chains = 4, core= 4,
               iter = 2500, warmup = 1500,
               control=list(adapt_delta = .8, max_treedepth = 10))

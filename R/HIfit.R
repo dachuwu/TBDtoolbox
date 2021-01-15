@@ -35,7 +35,7 @@ HIfit <- function(
   model = c("binomial", "normal"), ...
 ){
 
-
+  Y0 <- Y
   if(!model %in% c("binomial", "normal")) stop("Invalid model argument. Must be one of 'binomial', 'normal'. ")
   if(missing(Nsam)) stop("Missing required argument: Nsam")
   if(model == "binomial"){
@@ -78,6 +78,7 @@ HIfit <- function(
   cat("Compiling ... \n")
   if(model == "binomial"){
     Mod <- rstan::stan_model(model_code = TBDstan_models$HIfit_binomial)
+    #Mod <- rstan::stan_model("prep/stan/HIfit_binomial.stan")
   } else if (model == "normal"){
     Mod <- rstan::stan_model(model_code = TBDstan_models$HIfit_normal)
     #Mod <- rstan::stan_model("prep/stan/HIfit_normal.stan")
@@ -105,7 +106,7 @@ HIfit <- function(
       fit = res,
       dat = D,
       model = model,
-      Y_obs = Y,
+      Y_obs = Y0,
       Y_est = Y_est
 
     ), class = "HIfit")
@@ -115,11 +116,11 @@ HIfit <- function(
 #' @describeIn HIfit Plot the observations versus the predictions of HIfit
 #' @export
 plot.HIfit <- function(x){
-  ind <- x$D$isDat > 0
-  y <- x$obs[ind]
-  yp <- x$est[[1]]$est[ind]
-  yp_l <- x$est[[1]]$est_l[ind]
-  yp_u <- x$est[[1]]$est_u[ind]
+  ind <- x$dat$isDat > 0 & is.finite(x$Y_est[[1]]$est) & is.finite(x$Y_est[[1]]$est_l) & is.finite(x$Y_est[[1]]$est_u)
+  y <- x$Y_obs[ind]
+  yp <- x$Y_est[[1]]$est[ind]
+  yp_l <- x$Y_est[[1]]$est_l[ind]
+  yp_u <- x$Y_est[[1]]$est_u[ind]
   plot(y, yp, type = "n",
        xlab = "Observations",ylab = "Predictions",
        main = paste0("Imputation by ", x$model, " model"))
